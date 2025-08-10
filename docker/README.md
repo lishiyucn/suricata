@@ -56,7 +56,7 @@ docker pull ghcr.io/jasonish/suricata:latest
 # 基本 IDS 模式
 docker run --rm -it --net=host \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 ### 带日志挂载
@@ -66,7 +66,7 @@ docker run --rm -it --net=host \
 docker run --rm -it --net=host \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
     -v $(pwd)/logs:/var/log/suricata \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 ### IPS 模式（实时阻断）
@@ -74,12 +74,12 @@ docker run --rm -it --net=host \
 # NFQueue 模式 (需要 iptables 规则配合)
 docker run --rm -it --net=host \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -q 0
+    suricata:8.0.0-amd64 -q 0
 
 # AF_PACKET 模式
 docker run --rm -it --net=host \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest --af-packet
+    suricata:8.0.0-amd64 --af-packet
 ```
 
 ### PCAP 文件分析
@@ -87,7 +87,7 @@ docker run --rm -it --net=host \
 # 离线分析 PCAP 文件
 docker run --rm -it \
     -v $(pwd):/data \
-    jasonish/suricata:latest -r /data/traffic.pcap
+    suricata:8.0.0-amd64 -r /data/traffic.pcap
 ```
 
 ## 🔒 容器权限和安全
@@ -105,7 +105,7 @@ docker run --rm -it \
 ```bash
 docker run --rm -it --net=host \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 ### Podman 示例
@@ -113,7 +113,7 @@ docker run --rm -it --net=host \
 # Podman 必须显式添加权限
 sudo podman run --rm -it --net=host \
     --cap-add=net_admin,net_raw,sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 ### 用户权限映射
@@ -123,7 +123,7 @@ sudo podman run --rm -it --net=host \
 docker run --rm -it --net=host \
     -e PUID=$(id -u) -e PGID=$(id -g) \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 ## 📝 日志管理
@@ -137,7 +137,7 @@ docker run --rm -it --net=host \
 docker run --rm -it --net=host \
     -v $(pwd)/logs:/var/log/suricata \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 **容器间日志共享**：
@@ -145,7 +145,7 @@ docker run --rm -it --net=host \
 # 启动 Suricata 容器（指定名称）
 docker run -it --net=host --name=suricata \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 
 # 启动分析容器共享日志卷
 docker run -it --volumes-from=suricata \
@@ -171,7 +171,7 @@ docker exec CONTAINER_ID logrotate -vf /etc/logrotate.d/suricata
 # 启用 cron 服务
 docker run -e ENABLE_CRON=yes \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 **轮转配置** (`/etc/logrotate.d/suricata`):
@@ -206,7 +206,7 @@ Suricata 容器暴露以下卷挂载点：
 # 初始化配置目录
 mkdir ./etc
 docker run --rm -it -v $(pwd)/etc:/etc/suricata \
-    jasonish/suricata:latest -V
+    suricata:8.0.0-amd64 -V
 
 # 配置文件将生成在 ./etc 目录中
 ls ./etc/
@@ -223,9 +223,10 @@ docker run --rm -it --net=host \
     -v $(pwd)/logs:/var/log/suricata \
     -v $(pwd)/lib:/var/lib/suricata \
     -v $(pwd)/etc:/etc/suricata \
+    -v $(pwd)/rules:/etc/suricata/rules \
     -e PUID=$(id -u) -e PGID=$(id -g) \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 ## ⚙️ 配置管理
@@ -235,18 +236,51 @@ docker run --rm -it --net=host \
 
 ```bash
 # 1. 生成默认配置
-mkdir ./etc
+mkdir -p ./etc ./rules
 docker run --rm -it -v $(pwd)/etc:/etc/suricata \
-    jasonish/suricata:latest -V
+    suricata:8.0.0-amd64 -V
 
-# 2. 编辑配置文件
+# 2. 编辑配置文件，添加规则文件引用
 sudo nano ./etc/suricata.yaml
 
-# 3. 使用自定义配置运行
+# 3. 配置规则文件列表
+cat >> ./etc/suricata.yaml << 'EOF'
+
+# 添加规则文件配置
+rule-files:
+  - activex.rules
+  - adware_pup.rules  
+  - attack_response.rules
+  - botcc.rules
+  - chat.rules
+  - coinminer.rules
+  - compromised.rules
+  - current_events.rules
+  - dns.rules
+  - dos.rules
+  - exploit.rules
+  - ftp.rules
+  - hunting.rules
+  - icmp.rules
+  - malware.rules
+  - misc.rules
+  - phishing.rules
+  - policy.rules
+  - scan.rules
+  - shellcode.rules
+  - smtp.rules
+  - sql.rules
+  - web_client.rules
+  - web_server.rules
+  - worm.rules
+EOF
+
+# 4. 使用自定义配置和规则运行
 docker run --rm -it --net=host \
     -v $(pwd)/etc:/etc/suricata \
+    -v $(pwd)/rules:/etc/suricata/rules \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 ```
 
 ### 配置文件权限
@@ -259,18 +293,31 @@ sudo chown -R $(id -u):$(id -g) ./etc/
 # 或使用 PUID/PGID 环境变量
 docker run -e PUID=$(id -u) -e PGID=$(id -g) \
     -v $(pwd)/etc:/etc/suricata \
-    jasonish/suricata:latest -V
+    suricata:8.0.0-amd64 -V
 ```
 
 ### 关键配置文件
 
 | 文件 | 用途 |
 |------|------|
-| `suricata.yaml` | 主配置文件 |
-| `rules/` | 规则目录 |
+| `suricata.yaml` | 主配置文件，包含规则文件引用列表 |
+| `rules/` | 规则目录，包含所有检测规则文件 |
 | `threshold.config` | 阈值配置 |
 | `classification.config` | 分类配置 |
 | `reference.config` | 参考配置 |
+
+**规则文件配置示例**：
+在 `suricata.yaml` 中需要添加以下配置来引用规则文件：
+
+```yaml
+rule-files:
+  - activex.rules
+  - malware.rules
+  - exploit.rules
+  - web_client.rules
+  - web_server.rules
+  # ... 更多规则文件
+```
 
 ## 🔧 环境变量
 
@@ -282,13 +329,13 @@ docker run -e PUID=$(id -u) -e PGID=$(id -g) \
 docker run --net=host \
     -e SURICATA_OPTIONS="-i eno1 -vvv" \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest
+    suricata:8.0.0-amd64
 
 # 多个参数
 docker run --net=host \
     -e SURICATA_OPTIONS="--af-packet=eth0 --runmode=workers" \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest
+    suricata:8.0.0-amd64
 ```
 
 ### 其他环境变量
@@ -308,7 +355,7 @@ docker run --net=host \
 # 1. 启动 Suricata 容器（终端1）
 docker run --name=suricata --rm -it --net=host \
     --cap-add=net_admin --cap-add=net_raw --cap-add=sys_nice \
-    jasonish/suricata:latest -i eth0
+    suricata:8.0.0-amd64 -i eth0
 
 # 2. 更新规则（终端2）
 docker exec -it --user suricata suricata suricata-update -f
